@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.71"
+console = "0.15.7"
 indicatif = "0.17.4"
 nonempty = "0.8.1"

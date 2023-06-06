@@ -6,9 +6,28 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
+use console::style;
 use indicatif::{HumanDuration, ProgressBar, ProgressStyle};
 use nonempty::nonempty;
 use nonempty::NonEmpty;
+
+struct State {
+    buf: Vec<Line>,
+    pb: ProgressBar,
+    max_lines: u16,
+}
+
+#[derive(Clone)]
+enum Stream {
+    Stdout,
+    Stderr,
+}
+
+#[derive(Clone)]
+struct Line {
+    line: String,
+    stream: Stream,
+}
 
 fn build_command<S>(words: NonEmpty<S>) -> Command
 where
@@ -19,19 +38,22 @@ where
     cmd
 }
 
-fn _read_stream<R>(stream: R, out: Sender<String>, tag: &str) -> Result<()>
+fn _read_stream<R>(reader: R, out: &Sender<Line>, stream: Stream) -> Result<()>
 where
     R: Read,
 {
-    let buf = BufReader::new(stream).lines();
+    let buf = BufReader::new(reader).lines();
     for line in buf {
-        let the_line = line?;
-        out.send(format!("{}: {}", the_line, tag))?;
+        let line = line?;
+        out.send(Line {
+            line,
+            stream: stream.clone(),
+        })?;
     }
     Ok(())
 }
 
-fn collect(child: &mut Child, sender: &Sender<String>) -> Result<()> {
+fn collect(child: &mut Child, sender: &Sender<Line>) -> Result<()> {
     let err = child
         .stderr
         .take()
@@ -42,11 +64,11 @@ fn collect(child: &mut Child, sender: &Sender<String>) -> Result<()> {
         .ok_or_else(|| anyhow!("couldn't get stdout"))?;
     let t1 = thread::spawn({
         let sender = sender.clone();
-        move || _read_stream(err, sender, "err")
+        move || _read_stream(err, &sender, Stream::Stderr)
     });
     let t2 = thread::spawn({
         let sender = sender.clone();
-        move || _read_stream(out, sender, "out")
+        move || _read_stream(out, &sender, Stream::Stdout)
     });
     child.wait()?;
     t1.join().map_err(|_| anyhow!("thread panicked"))??;
@@ -54,9 +76,9 @@ fn collect(child: &mut Child, sender: &Sender<String>) -> Result<()> {
     Ok(())
 }
 
-fn spawn<F>(cmd: &mut Command, process: F) -> Result<()>
+fn spawn<F>(cmd: &mut Command, mut process: F) -> Result<()>
 where
-    F: Fn(&str) -> Result<()>,
+    F: FnMut(&Line) -> Result<()>,
 {
     let (sender, receiver) = channel();
     // Add piping
@@ -70,9 +92,42 @@ where
     Ok(())
 }
 
+fn progress(state: &mut State, line: &Line) -> Result<()> {
+    state.buf.push(line.clone());
+    let msg = &state.buf[state.buf.len().saturating_sub(state.max_lines as usize)..]
+        .iter()
+        .map(|line| {
+            let msg = style(&line.line).dim();
+            format!(
+                "{}",
+                match line.stream {
+                    Stream::Stdout => msg.cyan(),
+                    Stream::Stderr => msg.yellow(),
+                }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    state.pb.set_message(format!("\n{}", msg));
+    Ok(())
+}
+
 pub fn main() -> Result<()> {
     let mut c = build_command(nonempty!["/Users/waltermoreira/repos/athens/cmd.sh"]);
-    spawn(&mut c, |s| Ok(println!("{}", s)))
+    let pb = ProgressBar::new_spinner();
+    pb.enable_steady_tick(Duration::from_millis(200));
+    pb.set_style(
+        ProgressStyle::with_template("{spinner:.dim.bold} Athens: {wide_msg:.blue}")
+            .unwrap()
+            .tick_chars("/|\\- "),
+    );
+    let buf = Vec::new();
+    let mut state = State {
+        buf,
+        pb,
+        max_lines: 3,
+    };
+    spawn(&mut c, |s| progress(&mut state, s))
     //     let started = Instant::now();
 
     //     println!("Compiling package in release mode...");
@@ -110,7 +165,7 @@ pub fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::process::Stdio;
+    use std::{cmp::max, process::Stdio};
 
     use crate::build_command;
     use anyhow::Result;
@@ -123,6 +178,14 @@ mod tests {
         dbg!(&c);
         let s = c.output()?;
         dbg!(String::from_utf8(s.stdout)?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_bar() -> Result<()> {
+        let v = vec![2, 3, 4];
+        let x = v[v.len().saturating_sub(4)..].to_vec();
+        dbg!(x);
         Ok(())
     }
 }
