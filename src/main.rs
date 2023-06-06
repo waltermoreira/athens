@@ -54,14 +54,17 @@ fn collect(child: &mut Child, sender: &Sender<String>) -> Result<()> {
     Ok(())
 }
 
-fn spawn(cmd: &mut Command) -> Result<()> {
+fn spawn<F>(cmd: &mut Command, process: F) -> Result<()>
+where
+    F: Fn(&str) -> Result<()>,
+{
     let (sender, receiver) = channel();
     // Add piping
     cmd.stderr(Stdio::piped()).stdout(Stdio::piped());
     let mut child = cmd.spawn()?;
     let t = thread::spawn(move || collect(&mut child, &sender));
     for x in receiver {
-        println!(">>> {}", x);
+        process(&x)?;
     }
     t.join().map_err(|_| anyhow!("thread panicked"))??;
     Ok(())
@@ -69,7 +72,7 @@ fn spawn(cmd: &mut Command) -> Result<()> {
 
 pub fn main() -> Result<()> {
     let mut c = build_command(nonempty!["/Users/waltermoreira/repos/athens/cmd.sh"]);
-    spawn(&mut c)
+    spawn(&mut c, |s| Ok(println!("{}", s)))
     //     let started = Instant::now();
 
     //     println!("Compiling package in release mode...");
