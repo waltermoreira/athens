@@ -12,3 +12,4 @@ echo "Almost there"
 sleep 1
 echo "finish"
 sleep 2
+exit 1

@@ -2,7 +2,7 @@ use std::cmp::min;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io::{BufRead, BufReader, Read};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::time::Duration;
@@ -88,7 +88,7 @@ where
     Ok(())
 }
 
-fn collect(child: &mut Child, sender: &Sender<Line>) -> Result<()> {
+fn collect(child: &mut Child, sender: &Sender<Line>) -> Result<ExitStatus> {
     let err = child
         .stderr
         .take()
@@ -105,13 +105,15 @@ fn collect(child: &mut Child, sender: &Sender<Line>) -> Result<()> {
         let sender = sender.clone();
         move || _read_stream(out, &sender, Stream::Stdout)
     });
-    child.wait()?;
-    t1.join().map_err(|_| anyhow!("thread panicked"))??;
-    t2.join().map_err(|_| anyhow!("thread panicked"))??;
-    Ok(())
+    let status = child.wait()?;
+    t1.join()
+        .map_err(|_| anyhow!("thread panicked while reading stderr"))??;
+    t2.join()
+        .map_err(|_| anyhow!("thread panicked while reading stdout"))??;
+    Ok(status)
 }
 
-fn spawn<F>(cmd: &mut Command, mut process: F) -> Result<()>
+fn spawn<F>(cmd: &mut Command, mut process: F) -> Result<ExitStatus>
 where
     F: FnMut(&Line) -> Result<()>,
 {
@@ -123,8 +125,7 @@ where
     for x in receiver {
         process(&x)?;
     }
-    t.join().map_err(|_| anyhow!("thread panicked"))??;
-    Ok(())
+    Ok(t.join().map_err(|_| anyhow!("thread panicked"))??)
 }
 
 fn _draw_line<S>(line: S, width: usize) -> String
@@ -161,40 +162,14 @@ fn progress(state: &mut State, line: &Line) -> Result<()> {
 pub fn main() -> Result<()> {
     let mut c = build_command(nonempty!["/Users/waltermoreira/repos/athens/cmd.sh"]);
     let mut state = State::new();
-    spawn(&mut c, |s| progress(&mut state, s))
-    //     let started = Instant::now();
-
-    //     println!("Compiling package in release mode...");
-
-    //     let pb = ProgressBar::new_spinner();
-    //     pb.enable_steady_tick(Duration::from_millis(200));
-    //     pb.set_style(
-    //         ProgressStyle::with_template("{spinner:.dim.bold} cargo: {wide_msg}")
-    //             .unwrap()
-    //             .tick_chars("/|\\- "),
-    //     );
-
-    //     let mut p = process::Command::new("sleep")
-    //         .arg("5")
-    //         .stderr(process::Stdio::piped())
-    //         .spawn()
-    //         .unwrap();
-
-    //     pb.set_message("\nfoo\nbar\nbaz");
-    //     for line in BufReader::new(p.stderr.take().unwrap()).lines() {
-    //         let line = line.unwrap();
-    //         let stripped_line = line.trim();
-    //         if !stripped_line.is_empty() {
-    //             pb.set_message(format!("foo\n{}", stripped_line.to_owned()));
-    //         }
-    //         pb.tick();
-    //     }
-
-    //     p.wait().unwrap();
-
-    //     pb.finish_and_clear();
-
-    //     println!("Done in {}", HumanDuration(started.elapsed()));
+    let status = spawn(&mut c, |s| progress(&mut state, s))?;
+    state.pb.finish_and_clear();
+    if status.success() {
+        println!("Success!");
+    } else {
+        println!("Error: {:?}", status.code());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
