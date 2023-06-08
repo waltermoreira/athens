@@ -1,20 +1,26 @@
+use std::cmp::min;
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::io::{BufRead, BufReader, Read};
-use std::process::{self, Child, Command, Stdio};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc::{channel, Sender};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::{anyhow, Result};
-use console::style;
-use indicatif::{HumanDuration, ProgressBar, ProgressStyle};
+use console::{style, Term};
+use indicatif::{ProgressBar, ProgressStyle};
 use nonempty::nonempty;
 use nonempty::NonEmpty;
+
+const MAX_LINES: u16 = 4;
 
 struct State {
     buf: Vec<Line>,
     pb: ProgressBar,
     max_lines: u16,
+    term_lines: u16,
+    term_columns: u16,
 }
 
 #[derive(Clone)]
@@ -27,6 +33,35 @@ enum Stream {
 struct Line {
     line: String,
     stream: Stream,
+}
+
+impl State {
+    fn new() -> Self {
+        let term = Term::stdout();
+        let (term_lines, term_columns) = term.size();
+        let width = (term_columns as usize).saturating_sub(2);
+        let width_top = width.saturating_sub(11);
+        let top = format!(
+            "╭ Running {{spinner:.dim.bold}} {:─<width_top$}╮",
+            "",
+            width_top = width_top
+        );
+        let bottom = format!("╰{:─<width$}╯", "", width = width);
+        let pb = ProgressBar::new_spinner();
+        pb.enable_steady_tick(Duration::from_millis(200));
+        pb.set_style(
+            ProgressStyle::with_template(&format!("{top}\n{{msg}}\n{bottom}"))
+                .expect("error in the ProgressStyle template")
+                .tick_chars("/|\\- "),
+        );
+        Self {
+            buf: Default::default(),
+            pb,
+            max_lines: MAX_LINES,
+            term_lines,
+            term_columns,
+        }
+    }
 }
 
 fn build_command<S>(words: NonEmpty<S>) -> Command
@@ -92,41 +127,40 @@ where
     Ok(())
 }
 
+fn _draw_line<S>(line: S, width: usize) -> String
+where
+    S: Display,
+{
+    format!("│{:<width$}│", line, width = width)
+}
+
 fn progress(state: &mut State, line: &Line) -> Result<()> {
+    let width = (state.term_columns as usize).saturating_sub(2);
     state.buf.push(line.clone());
     let msg = &state.buf[state.buf.len().saturating_sub(state.max_lines as usize)..]
         .iter()
         .map(|line| {
-            let msg = style(&line.line).dim();
-            format!(
-                "{}",
+            let l = &line.line[..min(line.line.len(), width)];
+            let msg = style(l).dim();
+            _draw_line(
                 match line.stream {
                     Stream::Stdout => msg.cyan(),
                     Stream::Stderr => msg.yellow(),
-                }
+                },
+                width,
             )
         })
+        .chain([_draw_line(" ", width)].iter().cloned().cycle())
+        .take(state.max_lines as usize)
         .collect::<Vec<_>>()
         .join("\n");
-    state.pb.set_message(format!("\n{}", msg));
+    state.pb.set_message(format!("{}", msg));
     Ok(())
 }
 
 pub fn main() -> Result<()> {
     let mut c = build_command(nonempty!["/Users/waltermoreira/repos/athens/cmd.sh"]);
-    let pb = ProgressBar::new_spinner();
-    pb.enable_steady_tick(Duration::from_millis(200));
-    pb.set_style(
-        ProgressStyle::with_template("{spinner:.dim.bold} Athens: {wide_msg:.blue}")
-            .unwrap()
-            .tick_chars("/|\\- "),
-    );
-    let buf = Vec::new();
-    let mut state = State {
-        buf,
-        pb,
-        max_lines: 3,
-    };
+    let mut state = State::new();
     spawn(&mut c, |s| progress(&mut state, s))
     //     let started = Instant::now();
 
@@ -165,10 +199,11 @@ pub fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::{cmp::max, process::Stdio};
+    use std::process::Stdio;
 
     use crate::build_command;
     use anyhow::Result;
+    use console::Term;
     use nonempty::nonempty;
 
     #[test]
@@ -186,6 +221,8 @@ mod tests {
         let v = vec![2, 3, 4];
         let x = v[v.len().saturating_sub(4)..].to_vec();
         dbg!(x);
+        let t = Term::stdout();
+        dbg!(t.size());
         Ok(())
     }
 }
