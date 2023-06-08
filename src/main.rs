@@ -19,7 +19,7 @@ struct State {
     buf: Vec<Line>,
     pb: ProgressBar,
     max_lines: u16,
-    term_lines: u16,
+    _term_lines: u16,
     term_columns: u16,
 }
 
@@ -58,7 +58,7 @@ impl State {
             buf: Default::default(),
             pb,
             max_lines: MAX_LINES,
-            term_lines,
+            _term_lines: term_lines,
             term_columns,
         }
     }
@@ -154,7 +154,7 @@ fn progress(state: &mut State, line: &Line) -> Result<()> {
         .take(state.max_lines as usize)
         .collect::<Vec<_>>()
         .join("\n");
-    state.pb.set_message(format!("{}", msg));
+    state.pb.set_message(msg.to_string());
     Ok(())
 }
 
