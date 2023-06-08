@@ -32,7 +32,7 @@
       in
       {
         devShells.default = shell {
-          name = "athena";
+          name = "athens";
           packages = [
             (pkgs.rust-bin.stable.latest.default.override {
               extensions = [ "rust-src" ];
