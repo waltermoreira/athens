@@ -1,7 +1,8 @@
 use std::cmp::min;
 use std::ffi::OsStr;
 use std::fmt::Display;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::path::PathBuf;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
@@ -61,6 +62,16 @@ impl State {
             _term_lines: term_lines,
             term_columns,
         }
+    }
+
+    fn dump(&self) -> Result<PathBuf> {
+        let temp = tempfile::NamedTempFile::new()?;
+        let (temp, path) = temp.keep()?;
+        let mut buf = BufWriter::new(&temp);
+        for line in &self.buf {
+            writeln!(&mut buf, "{}", line.line)?;
+        }
+        Ok(path)
     }
 }
 
@@ -159,8 +170,11 @@ fn progress(state: &mut State, line: &Line) -> Result<()> {
     Ok(())
 }
 
-pub fn main() -> Result<()> {
-    let mut c = build_command(nonempty!["/Users/waltermoreira/repos/athens/cmd.sh"]);
+fn spawn_with_progress<S>(command: NonEmpty<S>) -> Result<(ExitStatus, PathBuf)>
+where
+    S: AsRef<OsStr>,
+{
+    let mut c = build_command(command);
     let mut state = State::new();
     let status = spawn(&mut c, |s| progress(&mut state, s))?;
     state.pb.finish_and_clear();
@@ -169,12 +183,19 @@ pub fn main() -> Result<()> {
     } else {
         println!("Error: {:?}", status.code());
     }
+    let f = state.dump()?;
+    Ok((status, f))
+}
+
+pub fn main() -> Result<()> {
+    let x = spawn_with_progress(nonempty!["./cmd.sh"])?;
+    dbg!(x);
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::process::Stdio;
+    use std::{fs::canonicalize, process::Stdio};
 
     use crate::build_command;
     use anyhow::Result;
@@ -198,6 +219,8 @@ mod tests {
         dbg!(x);
         let t = Term::stdout();
         dbg!(t.size());
+        let x = canonicalize("echo")?;
+        dbg!(x);
         Ok(())
     }
 }
