@@ -1,5 +1,5 @@
 use std::cmp::min;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::PathBuf;
@@ -9,7 +9,7 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
-use console::{style, Term};
+use console::{style, Color, Term};
 use indicatif::{ProgressBar, ProgressStyle};
 use nonempty::nonempty;
 use nonempty::NonEmpty;
@@ -136,7 +136,7 @@ where
     for x in receiver {
         process(&x)?;
     }
-    Ok(t.join().map_err(|_| anyhow!("thread panicked"))??)
+    t.join().map_err(|_| anyhow!("thread panicked"))?
 }
 
 fn _draw_line<S>(line: S, width: usize) -> String
@@ -174,22 +174,41 @@ fn spawn_with_progress<S>(command: NonEmpty<S>) -> Result<(ExitStatus, PathBuf)>
 where
     S: AsRef<OsStr>,
 {
+    let printable_command = command
+        .iter()
+        .map(|x| x.as_ref())
+        .collect::<Vec<_>>()
+        .join(&OsString::from(" "));
+    println!("Command: {}", printable_command.to_string_lossy());
     let mut c = build_command(command);
     let mut state = State::new();
     let status = spawn(&mut c, |s| progress(&mut state, s))?;
     state.pb.finish_and_clear();
-    if status.success() {
-        println!("Success!");
+    let (msg, color) = if status.success() {
+        ("Success!".into(), Color::Green)
     } else {
-        println!("Error: {:?}", status.code());
-    }
+        (
+            format!(
+                "Command exited with status: {}",
+                status
+                    .code()
+                    .map(|x| x.to_string())
+                    .unwrap_or_else(|| "none".into())
+            ),
+            Color::Red,
+        )
+    };
     let f = state.dump()?;
+    println!(
+        "{}",
+        style(format!("(check full output at: {})", f.to_string_lossy())).fg(color)
+    );
+    println!("{}", style(msg).fg(color));
     Ok((status, f))
 }
 
 pub fn main() -> Result<()> {
-    let x = spawn_with_progress(nonempty!["./cmd.sh"])?;
-    dbg!(x);
+    let _x = spawn_with_progress(nonempty!["./cmd.sh"])?;
     Ok(())
 }
 
