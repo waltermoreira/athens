@@ -9,4 +9,4 @@ ls -l
 sleep 1
 echo "Even more (to stderr)" >&2
 echo "finish"
-exit 2
+exit 0

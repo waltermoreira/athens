@@ -9,10 +9,10 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
+use clap::Parser;
 use console::{style, Color, Term};
 use indicatif::{ProgressBar, ProgressStyle};
-use nonempty::nonempty;
-use nonempty::NonEmpty;
+use nonempty::{nonempty, NonEmpty};
 
 const MAX_LINES: u16 = 4;
 
@@ -207,9 +207,31 @@ where
     Ok((status, f))
 }
 
+#[derive(Parser, Debug)]
+#[clap(
+    version = "0.1.0",
+    author = "Walter Moreira <walter@waltermoreira.net>",
+    about = "Run commands using pretty output",
+    arg_required_else_help = true
+)]
+#[clap(propagate_version = true)]
+struct Cli {
+    #[clap(value_parser, help = "command to run")]
+    command: Vec<String>,
+}
+
 pub fn main() -> Result<()> {
-    let _x = spawn_with_progress(nonempty!["./cmd.sh"])?;
-    Ok(())
+    let cli = Cli::parse();
+    let cmd_and_args = cli.command;
+    let head = &cmd_and_args[0];
+    let tail = cmd_and_args[1..].iter().collect::<Vec<_>>();
+    let cmd = NonEmpty::from((head, tail));
+    let (status, _) = spawn_with_progress(cmd)?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(anyhow!(""))
+    }
 }
 
 #[cfg(test)]
