@@ -12,7 +12,7 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use console::{style, Color, Term};
 use indicatif::{ProgressBar, ProgressStyle};
-use nonempty::{nonempty, NonEmpty};
+use nonempty::NonEmpty;
 
 const MAX_LINES: u16 = 4;
 
@@ -222,16 +222,9 @@ struct Cli {
 
 pub fn main() -> Result<()> {
     let cli = Cli::parse();
-    let cmd_and_args = cli.command;
-    let head = &cmd_and_args[0];
-    let tail = cmd_and_args[1..].iter().collect::<Vec<_>>();
-    let cmd = NonEmpty::from((head, tail));
+    let cmd = NonEmpty::from((&cli.command[0], cli.command[1..].iter().collect()));
     let (status, _) = spawn_with_progress(cmd)?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(anyhow!(""))
-    }
+    status.success().then_some(()).ok_or_else(|| anyhow!(""))
 }
 
 #[cfg(test)]
