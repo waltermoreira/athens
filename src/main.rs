@@ -228,37 +228,3 @@ pub fn main() -> Result<()> {
     let (status, _) = spawn_with_progress(cmd)?;
     status.success().then_some(()).ok_or_else(|| anyhow!(""))
 }
-
-#[cfg(test)]
-mod tests {
-    use std::{fs::canonicalize, process::Stdio};
-
-    use crate::build_command;
-    use anyhow::Result;
-    use console::Term;
-    use nonempty::nonempty;
-
-    #[test]
-    fn test_foo() -> Result<()> {
-        let mut c = build_command(nonempty![
-            "/Users/waltermoreira/repos/athens/cmd.sh"
-        ]);
-        c.stderr(Stdio::piped()).stdout(Stdio::piped());
-        dbg!(&c);
-        let s = c.output()?;
-        dbg!(String::from_utf8(s.stdout)?);
-        Ok(())
-    }
-
-    #[test]
-    fn test_bar() -> Result<()> {
-        let v = vec![2, 3, 4];
-        let x = v[v.len().saturating_sub(4)..].to_vec();
-        dbg!(x);
-        let t = Term::stdout();
-        dbg!(t.size());
-        let x = canonicalize("echo")?;
-        dbg!(x);
-        Ok(())
-    }
-}
