@@ -129,7 +129,6 @@ where
     F: FnMut(&Line) -> Result<()>,
 {
     let (sender, receiver) = channel();
-    // Add piping
     cmd.stderr(Stdio::piped()).stdout(Stdio::piped());
     let mut child = cmd.spawn()?;
     let t = thread::spawn(move || collect(&mut child, &sender));
@@ -149,7 +148,8 @@ where
 fn progress(state: &mut State, line: &Line) -> Result<()> {
     let width = (state.term_columns as usize).saturating_sub(2);
     state.buf.push(line.clone());
-    let msg = &state.buf[state.buf.len().saturating_sub(state.max_lines as usize)..]
+    let msg = &state.buf
+        [state.buf.len().saturating_sub(state.max_lines as usize)..]
         .iter()
         .map(|line| {
             let l = &line.line[..min(line.line.len(), width)];
@@ -201,7 +201,8 @@ where
     let f = state.dump()?;
     println!(
         "{}",
-        style(format!("(check full output at: {})", f.to_string_lossy())).fg(color)
+        style(format!("(check full output at: {})", f.to_string_lossy()))
+            .fg(color)
     );
     println!("{}", style(msg).fg(color));
     Ok((status, f))
@@ -222,7 +223,8 @@ struct Cli {
 
 pub fn main() -> Result<()> {
     let cli = Cli::parse();
-    let cmd = NonEmpty::from((&cli.command[0], cli.command[1..].iter().collect()));
+    let cmd =
+        NonEmpty::from((&cli.command[0], cli.command[1..].iter().collect()));
     let (status, _) = spawn_with_progress(cmd)?;
     status.success().then_some(()).ok_or_else(|| anyhow!(""))
 }
@@ -238,7 +240,9 @@ mod tests {
 
     #[test]
     fn test_foo() -> Result<()> {
-        let mut c = build_command(nonempty!["/Users/waltermoreira/repos/athens/cmd.sh"]);
+        let mut c = build_command(nonempty![
+            "/Users/waltermoreira/repos/athens/cmd.sh"
+        ]);
         c.stderr(Stdio::piped()).stdout(Stdio::piped());
         dbg!(&c);
         let s = c.output()?;
