@@ -29,8 +29,19 @@
         };
         shell = shell-utils.myShell.${system};
         craneLib = crane.mkLib pkgs;
+        src = craneLib.cleanCargoSource (craneLib.path ./.);
+        commonArgs = {
+          inherit src;
+          buildInputs = [
+          ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+            pkgs.libiconv
+          ];
+        };
+        cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+        runner = craneLib.buildPackage (commonArgs // { inherit cargoArtifacts; });
       in
       {
+        packages.default = runner;
         devShells.default = shell {
           name = "runner";
           packages = [
