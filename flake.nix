@@ -1,5 +1,5 @@
 {
-  description = "Athens";
+  description = "runner";
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/23.05";
     flake-utils.url = "github:numtide/flake-utils";
@@ -32,7 +32,7 @@
       in
       {
         devShells.default = shell {
-          name = "athens";
+          name = "runner";
           packages = [
             (pkgs.rust-bin.stable.latest.default.override {
               extensions = [ "rust-src" ];
