@@ -1,6 +1,6 @@
 # Run commands with pretty-printed output
 
-This is a simple runner that simple captures `stdout` and `stderr`, displays it in a contained box, and saves the streams for later access.
+This is a simple runner that captures `stdout` and `stderr`, displays it in a contained box, and saves the streams for later access.
 
 This is how it looks:
 ![screenshot](./screenshot.png)
