@@ -3,7 +3,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::PathBuf;
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{exit, Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::time::Duration;
@@ -226,5 +226,8 @@ pub fn main() -> Result<()> {
     let cmd =
         NonEmpty::from((&cli.command[0], cli.command[1..].iter().collect()));
     let (status, _) = spawn_with_progress(cmd)?;
-    status.success().then_some(()).ok_or_else(|| anyhow!(""))
+    status
+        .success()
+        .then_some(())
+        .ok_or_else(|| exit(status.code().unwrap_or(1)))
 }
