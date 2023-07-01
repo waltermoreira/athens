@@ -152,7 +152,11 @@ fn progress(state: &mut State, line: &Line) -> Result<()> {
         [state.buf.len().saturating_sub(state.max_lines as usize)..]
         .iter()
         .map(|line| {
-            let l = &line.line[..min(line.line.len(), width)];
+            let l = &line
+                .line
+                .chars()
+                .take(min(line.line.len(), width))
+                .collect::<String>();
             let msg = style(l).dim();
             _draw_line(
                 match line.stream {
@@ -230,4 +234,29 @@ pub fn main() -> Result<()> {
         .success()
         .then_some(())
         .ok_or_else(|| exit(status.code().unwrap_or(1)))
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+    use indicatif::ProgressBar;
+
+    use crate::{progress, Line, State, Stream, MAX_LINES};
+
+    #[test]
+    fn test_foo() -> Result<()> {
+        let mut state = State {
+            buf: Default::default(),
+            pb: ProgressBar::new_spinner(),
+            max_lines: MAX_LINES,
+            _term_lines: 10,
+            term_columns: 3,
+        };
+        let line = Line {
+            line: "ëëëëf".into(),
+            stream: Stream::Stdout,
+        };
+        progress(&mut state, &line)?;
+        Ok(())
+    }
 }
