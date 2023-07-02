@@ -175,7 +175,7 @@ fn _build_msg(state: &State) -> String {
 
 fn progress(state: &mut State, line: &Line) -> Result<()> {
     state.buf.push(line.clone());
-    let msg  = _build_msg(&state);
+    let msg = _build_msg(state);
     state.pb.set_message(msg);
     Ok(())
 }
@@ -236,13 +236,15 @@ where
 struct Cli {
     #[clap(value_parser, help = "command to run")]
     command: Vec<String>,
+    #[clap(short, long, value_parser, help = "Optional name of command")]
+    name: Option<OsString>,
 }
 
 pub fn main() -> Result<()> {
     let cli = Cli::parse();
     let cmd =
         NonEmpty::from((&cli.command[0], cli.command[1..].iter().collect()));
-    let pretty = printable_command(&cmd);
+    let pretty = cli.name.unwrap_or_else(|| printable_command(&cmd));
     println!("Command: {}", pretty.to_string_lossy());
     let (status, _) = spawn_with_progress(cmd)?;
     status
