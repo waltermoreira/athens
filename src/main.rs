@@ -145,11 +145,12 @@ where
     format!("│{:<width$}│", line, width = width)
 }
 
-fn progress(state: &mut State, line: &Line) -> Result<()> {
+// TODO: change to take just State as parameter
+fn _build_msg(state: &State) -> String {
+    let buf = &state.buf;
+    let max_lines = state.max_lines as usize;
     let width = (state.term_columns as usize).saturating_sub(2);
-    state.buf.push(line.clone());
-    let msg = &state.buf
-        [state.buf.len().saturating_sub(state.max_lines as usize)..]
+    buf[buf.len().saturating_sub(max_lines)..]
         .iter()
         .map(|line| {
             let l = &line
@@ -167,25 +168,37 @@ fn progress(state: &mut State, line: &Line) -> Result<()> {
             )
         })
         .chain([_draw_line(" ", width)].iter().cloned().cycle())
-        .take(state.max_lines as usize)
+        .take(max_lines)
         .collect::<Vec<_>>()
-        .join("\n");
-    state.pb.set_message(msg.to_string());
+        .join("\n")
+}
+
+fn progress(state: &mut State, line: &Line) -> Result<()> {
+    state.buf.push(line.clone());
+    let msg  = _build_msg(&state);
+    state.pb.set_message(msg);
     Ok(())
+}
+
+fn printable_command<S>(command: &NonEmpty<S>) -> OsString
+where
+    S: AsRef<OsStr>,
+{
+    command
+        .iter()
+        .map(|x| x.as_ref())
+        .collect::<Vec<_>>()
+        .join(&OsString::from(" "))
 }
 
 fn spawn_with_progress<S>(command: NonEmpty<S>) -> Result<(ExitStatus, PathBuf)>
 where
     S: AsRef<OsStr>,
 {
-    let printable_command = command
-        .iter()
-        .map(|x| x.as_ref())
-        .collect::<Vec<_>>()
-        .join(&OsString::from(" "));
-    println!("Command: {}", printable_command.to_string_lossy());
     let mut c = build_command(command);
     let mut state = State::new();
+    let initial_msg = _build_msg(&state);
+    state.pb.set_message(initial_msg);
     let status = spawn(&mut c, |s| progress(&mut state, s))?;
     state.pb.finish_and_clear();
     let (msg, color) = if status.success() {
@@ -229,6 +242,8 @@ pub fn main() -> Result<()> {
     let cli = Cli::parse();
     let cmd =
         NonEmpty::from((&cli.command[0], cli.command[1..].iter().collect()));
+    let pretty = printable_command(&cmd);
+    println!("Command: {}", pretty.to_string_lossy());
     let (status, _) = spawn_with_progress(cmd)?;
     status
         .success()
@@ -244,7 +259,7 @@ mod tests {
     use crate::{progress, Line, State, Stream, MAX_LINES};
 
     #[test]
-    fn test_foo() -> Result<()> {
+    fn test_unicode_splitting() -> Result<()> {
         let mut state = State {
             buf: Default::default(),
             pb: ProgressBar::new_spinner(),
